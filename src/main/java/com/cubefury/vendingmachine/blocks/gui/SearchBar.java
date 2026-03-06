@@ -5,9 +5,7 @@ import java.awt.Point;
 import org.jetbrains.annotations.NotNull;
 
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
-import com.cleanroommc.modularui.theme.TextFieldTheme;
 import com.cleanroommc.modularui.widgets.textfield.BaseTextFieldWidget;
-import com.cubefury.vendingmachine.gui.WidgetThemes;
 import com.cubefury.vendingmachine.util.Translator;
 
 public class SearchBar extends BaseTextFieldWidget<SearchBar> {
@@ -19,7 +17,6 @@ public class SearchBar extends BaseTextFieldWidget<SearchBar> {
         super();
 
         this.gui = gui;
-        widgetTheme(WidgetThemes.BACKGROUND_SEARCH_BAR);
         setText("");
         this.previousText = "";
         hintText(Translator.translate("vendingmachine.gui.search"));
@@ -65,17 +62,6 @@ public class SearchBar extends BaseTextFieldWidget<SearchBar> {
         }
         return this.handler.getText()
             .get(0);
-    }
-
-    @Override
-    protected void setupDrawText(ModularGuiContext context, TextFieldTheme widgetTheme) {
-        this.renderer.setSimulate(false);
-        this.renderer.setPos(
-            getArea().getPadding()
-                .getLeft(),
-            0);
-        this.renderer.setScale(this.scale);
-        this.renderer.setAlignment(this.textAlignment, -1, getArea().height);
     }
 
     public void setText(@NotNull String text) {

@@ -41,7 +41,6 @@ import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.gui.GuiTextures;
-import com.cubefury.vendingmachine.gui.WidgetThemes;
 import com.cubefury.vendingmachine.network.handlers.NetTradeDisplaySync;
 import com.cubefury.vendingmachine.storage.NameCache;
 import com.cubefury.vendingmachine.trade.CurrencyItem;
@@ -53,9 +52,9 @@ import com.cubefury.vendingmachine.util.BigItemStack;
 import com.cubefury.vendingmachine.util.Translator;
 import com.gtnewhorizon.gtnhlib.config.ConfigurationManager;
 
+import gregtech.api.metatileentity.implementations.gui.MTEMultiBlockBaseGui;
 import gregtech.api.modularui2.GTGuiTextures;
 import gregtech.api.modularui2.GTWidgetThemes;
-import gregtech.common.gui.modularui.multiblock.base.MTEMultiBlockBaseGui;
 
 public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
@@ -66,6 +65,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     private boolean ejectItems = false;
     private boolean ejectCoins = false;
     private final Map<CurrencyType, Boolean> ejectSingleCoin = new HashMap<>();
+    private final Map<CurrencyType, IntSyncValue> coinSyncValues = new HashMap<>();
     private final Map<TradeCategory, List<TradeItemDisplayWidget>> displayedTradesTiles = new HashMap<>();
     private final Map<TradeCategory, List<TradeItemDisplayWidget>> displayedTradesList = new HashMap<>();
     private final List<TradeCategory> tradeCategories = new ArrayList<>();
@@ -334,12 +334,10 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     }
 
     private IWidget createIOColumn() {
-        return new ParentWidget<>().excludeAreaInRecipeViewer()
-            .width(50)
+        return new ParentWidget<>().width(50)
             .height(214)
             .right(-48)
             .top(40)
-            .widgetTheme(WidgetThemes.BACKGROUND_SIDEPANEL)
             .child(
                 new Column().child(
                     GuiTextures.INPUT_SPRITE.asWidget()
@@ -487,14 +485,12 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     // spotless:off
     private IWidget createTradeUI(TradeMainPanel rootPanel, PagedWidget.Controller tabController) {
         PagedWidget<?> paged = new PagedWidget<>()
-            .name("paged")
             .width(162)
             .controller(tabController)
             .background(GuiTextures.TEXT_FIELD_BACKGROUND)
             .height(146);
         for (TradeCategory category : this.tradeCategories) {
             ListWidget<IWidget, ?> tradeList = new ListWidget<>()
-                .name("items")
                 .width(161)
                 .top(1)
                 .height(144)
@@ -612,7 +608,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     }
 
     private IWidget createCoinDisplay(TradeMainPanel panel, CurrencyType type, PanelSyncManager syncManager) {
-        IntSyncValue coinSyncValue = syncManager.findSyncHandler("coinAmount_" + type.id, 0, IntSyncValue.class);
+        IntSyncValue coinSyncValue = this.coinSyncValues.get(type);
         return new Row().child(
             new CoinButton(panel, type).overlay(
                 type.texture.asIcon()
@@ -651,10 +647,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                     .marginLeft(4));
     }
 
-    @Override
     protected void registerSyncValues(PanelSyncManager syncManager) {
-        super.registerSyncValues(syncManager);
-
         syncManager.registerSlotGroup("inputSlotGroup", 2, true);
         syncManager.registerSlotGroup("outputSlotGroup", 2, false);
 
@@ -679,6 +672,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             IntSyncValue coinAmountSyncer = new IntSyncValue(
                 () -> TradeManager.INSTANCE.playerCurrency.getOrDefault(playerId, Collections.emptyMap())
                     .getOrDefault(type, 0));
+            this.coinSyncValues.put(type, coinAmountSyncer);
             syncManager.syncValue("coinAmount_" + type.id, coinAmountSyncer);
 
             BooleanSyncValue ejectCoinSyncer = new BooleanSyncValue(() -> this.ejectSingleCoin.get(type), val -> {
@@ -689,7 +683,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             });
             syncManager.syncValue("ejectCoin_" + type.id, ejectCoinSyncer);
         }
-
     }
 
     public void attemptPurchase(TradeItemDisplay display) {

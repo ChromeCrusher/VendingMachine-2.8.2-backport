@@ -10,14 +10,13 @@ import com.cleanroommc.modularui.api.widget.Interactable;
 import com.cleanroommc.modularui.drawable.DynamicDrawable;
 import com.cleanroommc.modularui.drawable.GuiDraw;
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
-import com.cleanroommc.modularui.theme.WidgetThemeEntry;
+import com.cleanroommc.modularui.theme.WidgetTheme;
 import com.cleanroommc.modularui.utils.Platform;
 import com.cleanroommc.modularui.value.sync.GenericSyncValue;
 import com.cleanroommc.modularui.value.sync.SyncHandler;
 import com.cleanroommc.modularui.widgets.ItemDisplayWidget;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.gui.GuiTextures;
-import com.cubefury.vendingmachine.gui.WidgetThemes;
 import com.cubefury.vendingmachine.util.Translator;
 
 public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interactable {
@@ -33,7 +32,6 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
     public TradeItemDisplayWidget(TradeItemDisplay display, MTEVendingMachine base, DisplayType displayType) {
         this.vm = base;
         this.displayType = displayType;
-        widgetTheme(WidgetThemes.THEME_TRADE_BUTTON);
         if (displayType == DisplayType.TILE) {
             height(MTEVendingMachineGui.TILE_ITEM_HEIGHT);
             width(MTEVendingMachineGui.TILE_ITEM_WIDTH);
@@ -75,7 +73,7 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
     }
 
     @Override
-    public void draw(ModularGuiContext context, WidgetThemeEntry<?> widgetTheme) {
+    public void draw(ModularGuiContext context, WidgetTheme widgetTheme) {
         int textColor = Translator.getColor("vendingmachine.gui.display_text_color");
         ItemStack item = value.getValue();
         if (!Platform.isStackEmpty(item)) {

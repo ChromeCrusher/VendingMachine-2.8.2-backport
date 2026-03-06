@@ -70,6 +70,7 @@ import gregtech.api.interfaces.ITexture;
 import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
 import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
 import gregtech.api.metatileentity.implementations.MTEMultiBlockBase;
+import gregtech.api.metatileentity.implementations.gui.MTEMultiBlockBaseGui;
 import gregtech.api.render.RenderOverlay;
 import gregtech.api.render.TextureFactory;
 import gregtech.api.util.GTUtil;
@@ -412,7 +413,7 @@ public class MTEVendingMachine extends MTEMultiBlockBase
     }
 
     @Override
-    protected @NotNull MTEVendingMachineGui getGui() {
+    protected @NotNull MTEMultiBlockBaseGui getGui() {
         return new MTEVendingMachineGui(this);
     }
 
