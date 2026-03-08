@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 
 import com.cleanroommc.modularui.api.drawable.IKey;
@@ -41,7 +41,6 @@ import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.gui.GuiTextures;
-import com.cubefury.vendingmachine.network.handlers.NetTradeDisplaySync;
 import com.cubefury.vendingmachine.storage.NameCache;
 import com.cubefury.vendingmachine.trade.CurrencyItem;
 import com.cubefury.vendingmachine.trade.CurrencyType;
@@ -81,7 +80,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
     public static final int CUSTOM_UI_HEIGHT = 320;
 
-    // Trade Item Display
     public static final int TRADE_ROW_WIDTH = 154;
     public static final int TILE_ITEMS_PER_ROW = 3;
     public static final int TILE_ITEM_HEIGHT = 25;
@@ -134,11 +132,13 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
         registerSyncValues(syncManager);
         ModularPanel panel = new TradeMainPanel("MTEMultiBlockBase", this, guiData, syncManager)
-            .size(178, CUSTOM_UI_HEIGHT)
+            .size(228, CUSTOM_UI_HEIGHT)
             .padding(4);
+
         panel.child(createCategoryTabs(this.tabController));
+
         Flow mainColumn = new Column().width(170);
-        if (VendingMachine.proxy.isClient()) { // client side sort and filtering
+        if (VendingMachine.proxy.isClient()) {
             panel.child(createQolButtonColumn());
             mainColumn.child(
                 createTitleTextStyle(
@@ -149,12 +149,12 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                 .child(createTradeUI((TradeMainPanel) panel, this.tabController));
             mainColumn.child(createCoinInventoryRow((TradeMainPanel) panel, syncManager));
         }
+
         mainColumn.child(createInventoryRow());
         panel.child(mainColumn);
-        panel.child(
-            new Column().size(20)
-                .right(5));
+
         panel.child(createIOColumn());
+
         return panel;
     }
 
@@ -239,7 +239,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         return tabColumn;
     }
 
-    // why is the original method private lmao
     private IWidget createTitleTextStyle(String title) {
         return new SingleChildWidget<>().coverChildren()
             .topRel(0, -4, 1)
@@ -263,7 +262,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             .height(14);
     }
 
-    // Eject code is in GUI instead of MTE since the syncers are per-gui instance
     private void doEjectCoin(CurrencyType type) {
         if (this.guiData.isClient() || !this.base.getActive()) {
             return;
@@ -334,9 +332,10 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     }
 
     private IWidget createIOColumn() {
-        return new ParentWidget<>().width(50)
+        return new ParentWidget<>().background(GuiTextures.SIDE_PANEL_BACKGROUND)
+            .width(50)
             .height(214)
-            .right(-48)
+            .right(0)
             .top(40)
             .child(
                 new Column().child(
@@ -391,20 +390,15 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                                 client,
                                 this.getBase()
                                     .getCurrentUser());
+
                             if (client) {
                                 return;
                             }
-                            // server side force refresh
-                            // Not syncing the trades to client on slot change will cause a short refresh delay, but
-                            // might be worth
-                            // for huge AE systems
-                            NetTradeDisplaySync.syncTradesToClient(
-                                (EntityPlayerMP) this.getBase()
-                                    .getCurrentUser(),
-                                this.getBase());
+
                             if (hasCoin) {
                                 this.refreshInputSlots();
                             }
+
                             base.markDirty();
                         }));
             })
@@ -414,12 +408,11 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     private SlotGroupWidget createOutputSlots() {
         return SlotGroupWidget.builder()
             .matrix("II", "II", "II", "II")
-            .key('I', index -> {
-                return new ItemSlot().slot(
+            .key(
+                'I',
+                index -> new ItemSlot().slot(
                     new ModularSlot(base.outputItems, index).accessibility(false, true)
-                        .slotGroup("outputSlotGroup")
-                        .changeListener((newitem, onlyAmountChanged, client, init) -> { base.markDirty(); }));
-            })
+                        .slotGroup("outputSlotGroup")))
             .build();
     }
 
@@ -432,7 +425,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                             + toItem.getBaseStack()
                                 .getDisplayName())
                         .style(IKey.AQUA));
-                // builder.add(new ItemDrawable(toItem.getBaseStack()));
             }
             builder.emptyLine();
 
@@ -482,90 +474,123 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         }
     }
 
-    // spotless:off
     private IWidget createTradeUI(TradeMainPanel rootPanel, PagedWidget.Controller tabController) {
-        PagedWidget<?> paged = new PagedWidget<>()
-            .width(162)
+        PagedWidget<?> paged = new PagedWidget<>().width(162)
             .controller(tabController)
             .background(GuiTextures.TEXT_FIELD_BACKGROUND)
             .height(146);
         for (TradeCategory category : this.tradeCategories) {
-            ListWidget<IWidget, ?> tradeList = new ListWidget<>()
-                .width(161)
+            ListWidget<IWidget, ?> tradeList = new ListWidget<>().width(161)
                 .top(1)
                 .height(144)
                 .collapseDisabledChild(true);
 
             tradeList.child(new Row().height(2));
 
-            // Incomplete Structure status message
-            Flow statusRow = new Row().height(10).width(TRADE_ROW_WIDTH).marginLeft(2)
+            Flow statusRow = new Row().height(10)
+                .width(TRADE_ROW_WIDTH)
+                .marginLeft(2)
                 .child(new TextWidget(IKey.lang("vendingmachine.gui.error.incomplete_structure")))
-                .setEnabledIf(slot -> !this.getBase().getActive());
+                .setEnabledIf(
+                    slot -> !this.getBase()
+                        .getActive());
             tradeList.child(statusRow);
 
-            // Higher first row top margin
-            Flow row = new TradeRow().height(TILE_ITEM_HEIGHT +2).width(TRADE_ROW_WIDTH).marginLeft(2);
+            Flow row = new TradeRow().height(TILE_ITEM_HEIGHT + 2)
+                .width(TRADE_ROW_WIDTH)
+                .marginLeft(2);
 
-            // Tiles Display
             for (int i = 0; i < MTEVendingMachine.MAX_TRADES; i++) {
                 int index = i;
-                displayedTradesTiles.get(category).get(i).setRootPanel(rootPanel);
-                row.child(displayedTradesTiles.get(category).get(i)
-                    .tooltipDynamic(builder -> {
-                        builder.clearText();
-                        synchronized (displayedTradesTiles) {
-                            if (index < displayedTradesTiles.get(category).size()) {
-                                constructTradeTooltip(builder, displayedTradesTiles.get(category).get(index).getDisplay());
+                displayedTradesTiles.get(category)
+                    .get(i)
+                    .setRootPanel(rootPanel);
+                row.child(
+                    displayedTradesTiles.get(category)
+                        .get(i)
+                        .tooltipDynamic(builder -> {
+                            builder.clearText();
+                            synchronized (displayedTradesTiles) {
+                                if (
+                                    index < displayedTradesTiles.get(category)
+                                        .size()
+                                ) {
+                                    constructTradeTooltip(
+                                        builder,
+                                        displayedTradesTiles.get(category)
+                                            .get(index)
+                                            .getDisplay());
                                 }
                             }
-                    })
-                    .tooltipAutoUpdate(true)
-                    .setEnabledIf(slot -> {
-                        if (!this.getBase().getActive()) {
-                            return false;
-                        }
-                        TradeItemDisplayWidget display = ((TradeItemDisplayWidget) slot);
-                        return VMConfig.gui.display_type == display.displayType && display.getDisplay() != null;
-                    })
-                    .margin(2));
+                        })
+                        .tooltipAutoUpdate(true)
+                        .setEnabledIf(slot -> {
+                            if (
+                                !this.getBase()
+                                    .getActive()
+                            ) {
+                                return false;
+                            }
+                            TradeItemDisplayWidget display = (TradeItemDisplayWidget) slot;
+                            return VMConfig.gui.display_type == display.displayType && display.getDisplay() != null;
+                        })
+                        .margin(2));
                 if (i % TILE_ITEMS_PER_ROW == TILE_ITEMS_PER_ROW - 1) {
                     tradeList.child(row);
 
-                    row = new TradeRow().height(TILE_ITEM_HEIGHT +2).width(TRADE_ROW_WIDTH).marginLeft(2);
+                    row = new TradeRow().height(TILE_ITEM_HEIGHT + 2)
+                        .width(TRADE_ROW_WIDTH)
+                        .marginLeft(2);
                 }
             }
             if (row.hasChildren()) {
                 tradeList.child(row);
             }
 
-            // List Display
-            row = new TradeRow().height(LIST_ITEM_HEIGHT).width(TRADE_ROW_WIDTH).marginLeft(2);
+            row = new TradeRow().height(LIST_ITEM_HEIGHT)
+                .width(TRADE_ROW_WIDTH)
+                .marginLeft(2);
             for (int i = 0; i < MTEVendingMachine.MAX_TRADES; i++) {
                 int index = i;
-                displayedTradesList.get(category).get(i).setRootPanel(rootPanel);
-                row.child(displayedTradesList.get(category).get(i)
-                    .tooltipDynamic(builder -> {
-                        builder.clearText();
-                        synchronized (displayedTradesList) {
-                            if (index < displayedTradesList.get(category).size()) {
-                                constructTradeTooltip(builder, displayedTradesList.get(category).get(index).getDisplay());
+                displayedTradesList.get(category)
+                    .get(i)
+                    .setRootPanel(rootPanel);
+                row.child(
+                    displayedTradesList.get(category)
+                        .get(i)
+                        .tooltipDynamic(builder -> {
+                            builder.clearText();
+                            synchronized (displayedTradesList) {
+                                if (
+                                    index < displayedTradesList.get(category)
+                                        .size()
+                                ) {
+                                    constructTradeTooltip(
+                                        builder,
+                                        displayedTradesList.get(category)
+                                            .get(index)
+                                            .getDisplay());
+                                }
                             }
-                        }
-                    })
-                    .tooltipAutoUpdate(true)
-                    .setEnabledIf(slot -> {
-                        if (!this.getBase().getActive()) {
-                            return false;
-                        }
-                        TradeItemDisplayWidget display = ((TradeItemDisplayWidget) slot);
-                        return VMConfig.gui.display_type == display.displayType && display.getDisplay() != null;
-                    }));
+                        })
+                        .tooltipAutoUpdate(true)
+                        .setEnabledIf(slot -> {
+                            if (
+                                !this.getBase()
+                                    .getActive()
+                            ) {
+                                return false;
+                            }
+                            TradeItemDisplayWidget display = (TradeItemDisplayWidget) slot;
+                            return VMConfig.gui.display_type == display.displayType && display.getDisplay() != null;
+                        }));
                 tradeList.child(row);
-                row = new TradeRow().height(LIST_ITEM_HEIGHT).width(TRADE_ROW_WIDTH).marginLeft(2);
+                row = new TradeRow().height(LIST_ITEM_HEIGHT)
+                    .width(TRADE_ROW_WIDTH)
+                    .marginLeft(2);
             }
 
-            tradeList.child(new Row().height(2)); // bottom padding for last row
+            tradeList.child(new Row().height(2));
             paged.addPage(tradeList);
         }
 
@@ -573,7 +598,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             .left(3)
             .top(24);
     }
-    // spotless:on
 
     private static String getReadableStringFromCoinAmount(int amount) {
         if (amount < 10000) {
@@ -586,8 +610,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     }
 
     private IWidget createCoinInventoryRow(TradeMainPanel panel, PanelSyncManager syncManager) {
-        Flow parent = new Row() // .background(GuiTextures.TEXT_FIELD_BACKGROUND)
-            .width(162)
+        Flow parent = new Row().width(162)
             .height(36)
             .top(172)
             .left(3);
@@ -609,6 +632,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
     private IWidget createCoinDisplay(TradeMainPanel panel, CurrencyType type, PanelSyncManager syncManager) {
         IntSyncValue coinSyncValue = this.coinSyncValues.get(type);
+
         return new Row().child(
             new CoinButton(panel, type).overlay(
                 type.texture.asIcon()
@@ -616,7 +640,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                 .size(12)
                 .left(0)
                 .syncHandler("ejectCoin_" + type.id)
-                .tooltipDynamic((builder) -> {
+                .tooltipDynamic(builder -> {
                     builder.clearText();
                     builder.addLine(coinSyncValue.getValue() + " " + type.getLocalizedName());
                     builder.emptyLine();
@@ -635,7 +659,6 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             .height(14);
     }
 
-    // why is the original method private lmao
     private IWidget createInventoryRow() {
         return new Row().widthRel(1)
             .height(76)
@@ -647,6 +670,7 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                     .marginLeft(4));
     }
 
+    @Override
     protected void registerSyncValues(PanelSyncManager syncManager) {
         syncManager.registerSlotGroup("inputSlotGroup", 2, true);
         syncManager.registerSlotGroup("outputSlotGroup", 2, false);
@@ -667,11 +691,17 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         });
         syncManager.syncValue("ejectCoins", ejectCoinsSyncer);
 
-        UUID playerId = NameCache.INSTANCE.getUUIDFromPlayer(getBase().getCurrentUser());
         for (CurrencyType type : CurrencyType.values()) {
-            IntSyncValue coinAmountSyncer = new IntSyncValue(
-                () -> TradeManager.INSTANCE.playerCurrency.getOrDefault(playerId, Collections.emptyMap())
-                    .getOrDefault(type, 0));
+            IntSyncValue coinAmountSyncer = new IntSyncValue(() -> {
+                EntityPlayer player = getBase().getCurrentUser();
+                if (player == null) {
+                    return 0;
+                }
+
+                UUID playerId = NameCache.INSTANCE.getUUIDFromPlayer(player);
+                return TradeManager.INSTANCE.playerCurrency.getOrDefault(playerId, Collections.emptyMap())
+                    .getOrDefault(type, 0);
+            });
             this.coinSyncValues.put(type, coinAmountSyncer);
             syncManager.syncValue("coinAmount_" + type.id, coinAmountSyncer);
 
@@ -762,13 +792,10 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         return this.searchBar.getText();
     }
 
-    // server-side sync for all input slots
-    // during next tick after any input
     private void refreshInputSlots() {
         for (InterceptingSlot slot : this.inputSlots) {
             slot.getSyncHandler()
                 .forceSyncItem();
         }
     }
-
 }

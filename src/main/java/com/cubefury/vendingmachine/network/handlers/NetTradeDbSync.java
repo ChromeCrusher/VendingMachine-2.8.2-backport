@@ -2,7 +2,6 @@ package com.cubefury.vendingmachine.network.handlers;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
@@ -10,6 +9,7 @@ import net.minecraft.util.ResourceLocation;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.api.network.UnserializedPacket;
 import com.cubefury.vendingmachine.api.util.Tuple2;
+import com.cubefury.vendingmachine.blocks.gui.MTEVendingMachineGui;
 import com.cubefury.vendingmachine.network.PacketSender;
 import com.cubefury.vendingmachine.network.PacketTypeRegistry;
 import com.cubefury.vendingmachine.trade.TradeDatabase;
@@ -31,7 +31,6 @@ public class NetTradeDbSync {
     }
 
     public static void sendDatabase(@Nullable EntityPlayerMP player, boolean merge) {
-        // This can take a while, so we offload it to another thread
         ThreadedIO.INSTANCE.enqueue(() -> {
             NBTTagCompound data = TradeDatabase.INSTANCE.writeToNBT(new NBTTagCompound());
             NBTTagCompound payload = new NBTTagCompound();
@@ -45,7 +44,6 @@ public class NetTradeDbSync {
         });
     }
 
-    // request trade db sync
     @SideOnly(Side.CLIENT)
     public static void sendRequest(boolean merge) {
         NBTTagCompound payload = new NBTTagCompound();
@@ -62,12 +60,7 @@ public class NetTradeDbSync {
 
     @SideOnly(Side.CLIENT)
     public static void onClient(NBTTagCompound message) {
-        if (
-            Minecraft.getMinecraft()
-                .isIntegratedServerRunning()
-        ) {
-            return;
-        }
         TradeDatabase.INSTANCE.readFromNBT(message.getCompoundTag("data"), message.getBoolean("merge"), false);
+        MTEVendingMachineGui.setForceRefresh();
     }
 }

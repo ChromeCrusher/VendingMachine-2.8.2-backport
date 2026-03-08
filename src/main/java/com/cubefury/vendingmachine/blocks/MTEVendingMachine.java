@@ -40,6 +40,7 @@ import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.blocks.gui.MTEVendingMachineGui;
 import com.cubefury.vendingmachine.blocks.gui.TradeItemDisplay;
+import com.cubefury.vendingmachine.network.handlers.NetTradeDbSync;
 import com.cubefury.vendingmachine.network.handlers.NetTradeDisplaySync;
 import com.cubefury.vendingmachine.network.handlers.NetTradeRequestSync;
 import com.cubefury.vendingmachine.storage.NameCache;
@@ -149,7 +150,6 @@ public class MTEVendingMachine extends MTEMultiBlockBase
     }
 
     public boolean usingAnimations() {
-        // Logger.INFO("Is animated? "+this.mIsAnimated);
         return this.mIsAnimated;
     }
 
@@ -190,14 +190,13 @@ public class MTEVendingMachine extends MTEMultiBlockBase
             while (!this.outputBuffer.isEmpty() && remainingDispensables > 0) {
                 ItemStack next = this.outputBuffer.peek();
 
-                if (next == null) { // impossible, but just in case
+                if (next == null) {
                     this.outputBuffer.poll();
                 } else {
                     ItemStack nextCopy = next.copy();
                     nextCopy.stackSize = 1;
                     for (int i = 0; i < MTEVendingMachine.OUTPUT_SLOTS && remainingDispensables > 0
                         && next.stackSize > 0; i++) {
-                        // check for existing stacks
                         ItemStack cur = this.outputItems.getStackInSlot(i);
                         if (cur != null) {
                             ItemStack curCopy = cur.copy();
@@ -218,7 +217,6 @@ public class MTEVendingMachine extends MTEMultiBlockBase
                     }
                     for (int i = 0; i < MTEVendingMachine.OUTPUT_SLOTS && remainingDispensables > 0
                         && next.stackSize > 0; i++) {
-                        // make new stack
                         ItemStack cur = this.outputItems.getStackInSlot(i);
                         if (cur == null) {
                             int change = Math.min(remainingDispensables, next.stackSize);
@@ -232,7 +230,7 @@ public class MTEVendingMachine extends MTEMultiBlockBase
 
                     if (next.stackSize == 0) {
                         this.outputBuffer.poll();
-                    } else { // outputs full or dispensed enough items this cycle
+                    } else {
                         break;
                     }
                 }
@@ -289,7 +287,6 @@ public class MTEVendingMachine extends MTEMultiBlockBase
         for (BigItemStack stack : trade.fromItems) {
             ItemStack requiredStack = stack.getBaseStack();
             int requiredAmount = stack.stackSize;
-            // Remove items from last stacks if possible (exact matches)
             for (int i = MTEVendingMachine.INPUT_SLOTS - 1; i >= 0 && requiredAmount > 0; i--) {
                 if (inputSlots[i] == null) {
                     continue;
@@ -304,7 +301,6 @@ public class MTEVendingMachine extends MTEMultiBlockBase
                     }
                 }
             }
-            // Remove items from last stacks if possible (oredict matches)
             if (requiredAmount > 0 && stack.hasOreDict()) {
                 String ore = stack.getOreDict();
                 for (int i = MTEVendingMachine.INPUT_SLOTS - 1; i >= 0 && requiredAmount > 0; i--) {
@@ -655,7 +651,7 @@ public class MTEVendingMachine extends MTEMultiBlockBase
             BigItemStack base = bis.copy();
             boolean hasOreDict = bis.hasOreDict();
             base.setTagCompound(null);
-            base.stackSize = 1; // shouldn't need this, but just in case
+            base.stackSize = 1;
 
             ItemStack aeStackSearch = base.getBaseStack();
             aeStackSearch.stackSize = bis.stackSize;
@@ -704,7 +700,6 @@ public class MTEVendingMachine extends MTEMultiBlockBase
         if (availableCurrency == null) {
             return false;
         }
-        // TODO: Add AE2 coin item support
         return currencyItems.stream()
             .allMatch(ci -> availableCurrency.containsKey(ci.type) && availableCurrency.get(ci.type) >= ci.value);
     }
@@ -781,8 +776,12 @@ public class MTEVendingMachine extends MTEMultiBlockBase
         }
         if (canUse(aPlayer)) {
             this.currentUser = aPlayer;
-            // force trade state update now
             this.ticksSinceTradeUpdate = VMConfig.vendingMachineSettings.gui_refresh_interval;
+
+            if (aPlayer instanceof EntityPlayerMP mpPlayer) {
+                NetTradeDbSync.sendDatabase(mpPlayer, false);
+            }
+
             openGui(aPlayer);
         } else {
             aPlayer.addChatComponentMessage(new ChatComponentTranslation("vendingmachine.gui.error.player_using"));

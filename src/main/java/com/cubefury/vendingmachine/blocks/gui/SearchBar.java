@@ -6,17 +6,19 @@ import org.jetbrains.annotations.NotNull;
 
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
 import com.cleanroommc.modularui.widgets.textfield.BaseTextFieldWidget;
+import com.cubefury.vendingmachine.gui.GuiTextures;
 import com.cubefury.vendingmachine.util.Translator;
 
 public class SearchBar extends BaseTextFieldWidget<SearchBar> {
 
-    private MTEVendingMachineGui gui;
+    private final MTEVendingMachineGui gui;
     private String previousText;
 
     public SearchBar(MTEVendingMachineGui gui) {
         super();
 
         this.gui = gui;
+        background(GuiTextures.TEXT_FIELD_BACKGROUND);
         setText("");
         this.previousText = "";
         hintText(Translator.translate("vendingmachine.gui.search"));

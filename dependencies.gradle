@@ -1,7 +1,7 @@
 dependencies {
     implementation("com.github.GTNewHorizons:NotEnoughItems:2.8.40-GTNH:dev")
     implementation("com.github.GTNewHorizons:GTNHLib:0.7.10:dev")
-    compileOnly("com.github.GTNewHorizons:BetterQuesting:3.7.15-GTNH:dev")
+    implementation("com.github.GTNewHorizons:BetterQuesting:3.7.15-GTNH:dev")
 
     implementation("com.github.GTNewHorizons:ModularUI2:2.2.18-1.7.10:dev")
     implementation("com.github.GTNewHorizons:StructureLib:1.4.23:dev")

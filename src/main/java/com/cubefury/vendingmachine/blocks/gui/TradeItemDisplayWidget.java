@@ -4,7 +4,6 @@ import net.minecraft.item.ItemStack;
 
 import org.jetbrains.annotations.NotNull;
 
-import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.api.value.IValue;
 import com.cleanroommc.modularui.api.widget.Interactable;
 import com.cleanroommc.modularui.drawable.DynamicDrawable;
@@ -21,7 +20,7 @@ import com.cubefury.vendingmachine.util.Translator;
 
 public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interactable {
 
-    private MTEVendingMachine vm;
+    private final MTEVendingMachine vm;
     private TradeMainPanel rootPanel;
     private boolean pressed = false;
     private IValue<ItemStack> value;
@@ -32,18 +31,21 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
     public TradeItemDisplayWidget(TradeItemDisplay display, MTEVendingMachine base, DisplayType displayType) {
         this.vm = base;
         this.displayType = displayType;
+
         if (displayType == DisplayType.TILE) {
             height(MTEVendingMachineGui.TILE_ITEM_HEIGHT);
             width(MTEVendingMachineGui.TILE_ITEM_WIDTH);
             background(
                 new DynamicDrawable(
-                    () -> pressed ? GuiTextures.TILE_TRADE_BUTTON_PRESSED : GuiTextures.TILE_TRADE_BUTTON_UNPRESSED));
+                    () -> this.pressed ? GuiTextures.TILE_TRADE_BUTTON_PRESSED
+                        : GuiTextures.TILE_TRADE_BUTTON_UNPRESSED));
         } else if (displayType == DisplayType.LIST) {
             height(MTEVendingMachineGui.LIST_ITEM_HEIGHT);
             width(MTEVendingMachineGui.LIST_ITEM_WIDTH);
             background(
                 new DynamicDrawable(
-                    () -> pressed ? GuiTextures.LIST_TRADE_BUTTON_PRESSED : GuiTextures.LIST_TRADE_BUTTON_UNPRESSED));
+                    () -> this.pressed ? GuiTextures.LIST_TRADE_BUTTON_PRESSED
+                        : GuiTextures.LIST_TRADE_BUTTON_UNPRESSED));
         }
 
         this.display = display;
@@ -63,10 +65,17 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
         return this.display;
     }
 
+    @Override
     public @NotNull Interactable.Result onMousePressed(int mouseButton) {
-        if (rootPanel.shiftHeld) {
-            rootPanel.attemptPurchase(this.display);
-            pressed = true;
+        if (this.display == null || this.rootPanel == null) {
+            return Result.IGNORE;
+        }
+        if (!this.checkVmActive() || !this.display.enabled || this.display.hasCooldown) {
+            return Result.IGNORE;
+        }
+        if (this.rootPanel.shiftHeld) {
+            this.rootPanel.attemptPurchase(this.display);
+            this.pressed = true;
             return Result.SUCCESS;
         }
         return Result.IGNORE;
@@ -75,14 +84,16 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
     @Override
     public void draw(ModularGuiContext context, WidgetTheme widgetTheme) {
         int textColor = Translator.getColor("vendingmachine.gui.display_text_color");
-        ItemStack item = value.getValue();
-        if (!Platform.isStackEmpty(item)) {
+        ItemStack item = this.value == null ? null : this.value.getValue();
+        if (!Platform.isStackEmpty(item) && this.display != null) {
             if (this.displayType == DisplayType.TILE) {
                 GuiDraw.drawText(" " + this.display.display.stackSize, 4, 9, 1.0f, textColor, false);
                 GuiDraw.drawItem(item, 26, 4, 16, 16, context.getCurrentDrawingZ());
+
                 if (this.display.tradeableNow) {
                     GuiDraw.drawOutline(1, 1, 45, 23, 0x883CFF00, 2);
                 }
+
                 if (!this.checkVmActive() || this.display.hasCooldown || !this.display.enabled) {
                     GuiDraw.drawRoundedRect(
                         1,
@@ -93,29 +104,30 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
                         1,
                         1);
                 }
-                this.overlay(
-                    IKey.str(display.hasCooldown ? this.display.cooldownText : "")
-                        .style(IKey.WHITE));
+
+                if (this.display.hasCooldown) {
+                    GuiDraw.drawText(this.display.cooldownText, 4, 18, 0.8f, 0xFFFFFFFF, false);
+                }
             } else if (this.displayType == DisplayType.LIST) {
                 GuiDraw.drawText("" + this.display.display.stackSize, 6, 4, 0.9f, textColor, false);
                 GuiDraw.drawItem(item, 24, 2, 9, 9, context.getCurrentDrawingZ());
+
+                String displayName = this.display.display.getDisplayName();
                 GuiDraw.drawText(
-                    this.display.display.getDisplayName()
-                        .length() > 21
-                            ? this.display.display.getDisplayName()
-                                .substring(0, 21) + "..."
-                            : this.display.display.getDisplayName(),
+                    displayName.length() > 21 ? displayName.substring(0, 21) + "..." : displayName,
                     36,
                     4,
                     0.9f,
                     textColor,
                     false);
+
                 GuiDraw.drawRect(
                     1,
                     1,
                     3,
                     MTEVendingMachineGui.LIST_ITEM_HEIGHT - 3,
                     this.display.tradeableNow ? 0x883CFF00 : 0x88333333);
+
                 if (!this.checkVmActive() || this.display.hasCooldown || !this.display.enabled) {
                     GuiDraw.drawRect(
                         1,
@@ -124,10 +136,10 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
                         MTEVendingMachineGui.LIST_ITEM_HEIGHT - 2,
                         0xBB000000);
                 }
-                this.overlay(
-                    IKey.str(display.hasCooldown && this.display.enabled ? this.display.cooldownText : "")
-                        .style(IKey.WHITE)
-                        .scale(0.9f));
+
+                if (this.display.hasCooldown && this.display.enabled) {
+                    GuiDraw.drawText(this.display.cooldownText, 110, 4, 0.9f, 0xFFFFFFFF, false);
+                }
             }
         }
     }
@@ -143,19 +155,19 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
 
     public ItemDisplayWidget item(IValue<ItemStack> itemSupplier) {
         this.value = itemSupplier;
-        setValue(itemSupplier);
+        this.setValue(itemSupplier);
         return this;
     }
 
     @Override
     public void onMouseEndHover() {
-        pressed = false;
+        this.pressed = false;
         super.onMouseEndHover();
     }
 
     @Override
     public boolean onMouseRelease(int mouseButton) {
-        pressed = false;
+        this.pressed = false;
         return true;
     }
 

@@ -3,6 +3,10 @@ package com.cubefury.vendingmachine.handlers;
 import static com.cubefury.vendingmachine.util.FileIO.CopyPaste;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -67,8 +71,35 @@ public class SaveLoadHandler {
                 VendingMachine.LOG.warn("Could not create new name cache file");
             }
         }
+
         if (dirTradeState.mkdirs()) {
             VendingMachine.LOG.info("Created trade state directory");
+        }
+
+        File dbParent = fileDatabase.getParentFile();
+        if (dbParent != null && dbParent.mkdirs()) {
+            VendingMachine.LOG.info("Created trade database directory");
+        }
+
+        ensureTradeDatabaseExists();
+    }
+
+    private void ensureTradeDatabaseExists() {
+        if (fileDatabase.exists() && fileDatabase.length() > 0) {
+            return;
+        }
+
+        try (InputStream in = SaveLoadHandler.class
+            .getResourceAsStream("/assets/vendingmachine/defaults/tradeDatabase.json")) {
+            if (in == null) {
+                VendingMachine.LOG.warn("Could not find bundled default trade database");
+                return;
+            }
+
+            Files.copy(in, fileDatabase.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            VendingMachine.LOG.info("Created trade database file from bundled default");
+        } catch (IOException e) {
+            VendingMachine.LOG.warn("Could not create trade database file from bundled default", e);
         }
     }
 

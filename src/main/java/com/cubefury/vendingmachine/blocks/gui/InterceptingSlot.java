@@ -19,7 +19,6 @@ public class InterceptingSlot extends ModularSlot {
         this.vm = vm;
     }
 
-    // intercept item on both ends, but only do the post-intercept actions on server side
     public boolean intercept(ItemStack newItem, boolean client, EntityPlayer player) {
         if (vm == null || !vm.getActive()) {
             return false;
@@ -41,5 +40,4 @@ public class InterceptingSlot extends ModularSlot {
         }
         return CurrencyItem.fromItemStack(newItem);
     }
-
 }

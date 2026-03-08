@@ -12,6 +12,8 @@ import com.cubefury.vendingmachine.trade.TradeGroup;
 import com.cubefury.vendingmachine.trade.TradeManager;
 import com.google.common.collect.ImmutableMap;
 
+import betterquesting.api.questing.IQuest;
+import betterquesting.questing.QuestDatabase;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
@@ -20,10 +22,6 @@ public class BqAdapter {
     public static final BqAdapter INSTANCE = new BqAdapter();
 
     private final Map<UUID, Set<TradeGroup>> questUpdateTriggers = new HashMap<>();
-
-    // cache of quests that player has completed, for NEI integration not having
-    // to look it up so much
-    // Server calculates this cache and syncs it directly to players
     private final Map<UUID, Set<UUID>> playerSatisfiedCache = new HashMap<>();
 
     private BqAdapter() {}
@@ -52,7 +50,6 @@ public class BqAdapter {
 
     @SideOnly(Side.CLIENT)
     public void setPlayerSatisfiedCache(Map<UUID, Set<UUID>> newCache) {
-        // Player -> Set<QuestDone>
         synchronized (playerSatisfiedCache) {
             playerSatisfiedCache.clear();
             playerSatisfiedCache.putAll(newCache);
@@ -74,13 +71,16 @@ public class BqAdapter {
     }
 
     public void setQuestUnfinished(UUID player, UUID quest) {
+        if (!questUpdateTriggers.containsKey(quest)) {
+            return;
+        }
         for (TradeGroup tradeGroup : questUpdateTriggers.get(quest)) {
             TradeManager.INSTANCE.removeSatisfiedCondition(tradeGroup, player, new BqCondition(quest));
-            synchronized (playerSatisfiedCache) {
-                if (playerSatisfiedCache.get(player) != null) {
-                    playerSatisfiedCache.get(player)
-                        .remove(quest);
-                }
+        }
+        synchronized (playerSatisfiedCache) {
+            if (playerSatisfiedCache.get(player) != null) {
+                playerSatisfiedCache.get(player)
+                    .remove(quest);
             }
         }
     }
@@ -103,6 +103,30 @@ public class BqAdapter {
         }
     }
 
+    public void syncQuestState(UUID player, UUID quest) {
+        if (quest == null) {
+            return;
+        }
+
+        IQuest bqQuest = QuestDatabase.INSTANCE.get(quest);
+        if (bqQuest != null && bqQuest.isComplete(player)) {
+            setQuestFinished(player, quest);
+        } else {
+            setQuestUnfinished(player, quest);
+        }
+    }
+
+    public void syncAllQuestStates(UUID player) {
+        resetQuests(player);
+
+        for (UUID quest : questUpdateTriggers.keySet()) {
+            IQuest bqQuest = QuestDatabase.INSTANCE.get(quest);
+            if (bqQuest != null && bqQuest.isComplete(player)) {
+                setQuestFinished(player, quest);
+            }
+        }
+    }
+
     public boolean checkPlayerCompletedQuest(UUID player, UUID quest) {
         synchronized (playerSatisfiedCache) {
             return playerSatisfiedCache.get(player) != null && playerSatisfiedCache.get(player)
@@ -117,8 +141,6 @@ public class BqAdapter {
             return output;
         }
 
-        // Cannot use TradeManager.availableTrades since it is only updated
-        // when Vending Machine GUI is open
         for (TradeGroup tradeGroup : questUpdateTriggers.get(quest)) {
             output.add(tradeGroup.getId());
         }
@@ -130,5 +152,4 @@ public class BqAdapter {
         return questUpdateTriggers.get(quest) != null && !questUpdateTriggers.get(quest)
             .isEmpty();
     }
-
 }

@@ -2,6 +2,7 @@ package com.cubefury.vendingmachine.handlers;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 
@@ -22,6 +23,7 @@ import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.events.MarkDirtyDbEvent;
 import com.cubefury.vendingmachine.events.MarkDirtyNamesEvent;
+import com.cubefury.vendingmachine.integration.betterquesting.BqAdapter;
 import com.cubefury.vendingmachine.network.handlers.NetBulkSync;
 import com.cubefury.vendingmachine.network.handlers.NetTradeDbSync;
 import com.cubefury.vendingmachine.storage.NameCache;
@@ -30,6 +32,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListenableFutureTask;
 
+import betterquesting.api.events.QuestEvent;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -62,6 +65,9 @@ public class EventHandler {
                 || !(event.player instanceof EntityPlayerMP mpPlayer)
         ) return;
 
+        UUID playerId = NameCache.INSTANCE.getUUIDFromPlayer(mpPlayer);
+        BqAdapter.INSTANCE.syncAllQuestStates(playerId);
+
         if (
             VendingMachine.proxy.isClient() && !MinecraftServer.getServer()
                 .isDedicatedServer()
@@ -76,6 +82,38 @@ public class EventHandler {
         }
 
         NetBulkSync.sendReset(mpPlayer, true, true);
+    }
+
+    @SubscribeEvent
+    public void onQuestEvent(QuestEvent event) {
+        UUID playerId = event.getPlayerID();
+        if (
+            playerId == null || event.getQuestIDs() == null
+                || event.getQuestIDs()
+                    .isEmpty()
+        ) {
+            return;
+        }
+
+        switch (event.getType()) {
+            case COMPLETED:
+                for (UUID questId : event.getQuestIDs()) {
+                    BqAdapter.INSTANCE.setQuestFinished(playerId, questId);
+                }
+                break;
+            case RESET:
+                for (UUID questId : event.getQuestIDs()) {
+                    BqAdapter.INSTANCE.setQuestUnfinished(playerId, questId);
+                }
+                break;
+            case UPDATED:
+                for (UUID questId : event.getQuestIDs()) {
+                    BqAdapter.INSTANCE.syncQuestState(playerId, questId);
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     @SubscribeEvent
@@ -172,5 +210,4 @@ public class EventHandler {
                 .writeTradeState(Collections.singleton(NameCache.INSTANCE.getUUIDFromPlayer(player)));
         }
     }
-
 }

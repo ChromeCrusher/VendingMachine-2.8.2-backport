@@ -25,28 +25,14 @@ import com.cubefury.vendingmachine.network.handlers.NetTradeNotification;
 import com.cubefury.vendingmachine.storage.NameCache;
 import com.cubefury.vendingmachine.util.NBTConverter;
 
-// Sync the following objects to the client every GUI refresh cycle:
-// tradedata, No-condition trades and currency
-// Everything else is stored server-side
 public class TradeManager {
 
     public static TradeManager INSTANCE = new TradeManager();
 
-    // availableTrades and noCondition trades technically have information that
-    // is extractable from tradegroupStates, but querying that every second
-    // for gui display is more expensive so we cache it here
     private final Map<UUID, Set<UUID>> availableTrades = new HashMap<>();
-
-    // Map for tradegroup id -> player trade states and unlock status
     public final Map<UUID, TradeGroupState> tradeGroupStates = new HashMap<>();
-
-    // Map for player id -> currency data
     public final Map<UUID, Map<CurrencyType, Integer>> playerCurrency = new HashMap<>();
-
-    // Map for player id -> trades with pending refresh notifications
     public final Map<UUID, Set<UUID>> notificationQueue = new HashMap<>();
-
-    // For writeback to file in original format, to prevent data loss
     private final Map<UUID, List<NBTTagCompound>> invalidCurrency = new HashMap<>();
 
     public final List<TradeItemDisplay> tradeData = new ArrayList<>();

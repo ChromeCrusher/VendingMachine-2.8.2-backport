@@ -1,5 +1,6 @@
 package com.cubefury.vendingmachine.trade;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -15,12 +16,7 @@ public class TradeGroupState {
 
     public TradeGroup tradeGroup;
 
-    // List of completed conditions for each player
-    // This is only updated server-side, since players only need to know what trades
-    // they have and their status.
     private final Map<UUID, Set<ICondition>> playerSatisfied = new HashMap<>();
-
-    // List of players with trade history
     private final Map<UUID, TradeHistory> tradeState = new HashMap<>();
 
     public TradeGroupState(TradeGroup tradeGroup) {
@@ -61,7 +57,7 @@ public class TradeGroupState {
     }
 
     public boolean satisfiesTrade(@Nonnull UUID player) {
-        return playerSatisfied.get(player)
+        return playerSatisfied.getOrDefault(player, Collections.emptySet())
             .equals(tradeGroup.getRequirements());
     }
 
