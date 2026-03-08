@@ -119,7 +119,7 @@ public class MTEVendingMachine extends MTEMultiBlockBase
 
     public int mUpdate = 0;
     public boolean mMachine = false;
-    private boolean mIsAnimated;
+    private final boolean mIsAnimated;
 
     public ItemStackHandler inputItems = new ItemStackHandler(INPUT_SLOTS);
     public ItemStackHandler outputItems = new ItemStackHandler(OUTPUT_SLOTS);
@@ -606,20 +606,27 @@ public class MTEVendingMachine extends MTEMultiBlockBase
 
     @Override
     public void onPostTick(IGregTechTileEntity aBaseMetaTileEntity, long aTimer) {
-        if (aBaseMetaTileEntity.isClientSide() && !aBaseMetaTileEntity.isActive()) {
-            OverlayHelper.clearVMOverlay(overlayTickets);
+        super.onPostTick(aBaseMetaTileEntity, aTimer);
+
+        if (aBaseMetaTileEntity.isClientSide()) {
+            if (!aBaseMetaTileEntity.isActive()) {
+                OverlayHelper.clearVMOverlay(overlayTickets);
+            }
+            return;
+        } else if (this.mUpdate++ % STRUCTURE_CHECK_TICKS == 0) {
+            this.mMachine = checkMachine(aBaseMetaTileEntity, null);
         }
-        if (aBaseMetaTileEntity.isServerSide()) {
-            dispenseItems();
-            if (
-                this.getActive() && this.ticksSinceTradeUpdate++ >= VMConfig.vendingMachineSettings.gui_refresh_interval
-            ) {
-                this.sendTradeUpdate();
-            }
-            if (this.mUpdate++ % STRUCTURE_CHECK_TICKS == 0) {
-                this.mMachine = checkMachine(aBaseMetaTileEntity, null);
-                aBaseMetaTileEntity.setActive(this.mMachine);
-            }
+
+        aBaseMetaTileEntity.setActive(this.mMachine);
+
+        if (!this.mMachine) {
+            return;
+        }
+
+        dispenseItems();
+
+        if (this.ticksSinceTradeUpdate++ >= VMConfig.vendingMachineSettings.gui_refresh_interval) {
+            this.sendTradeUpdate();
         }
     }
 
@@ -807,6 +814,7 @@ public class MTEVendingMachine extends MTEMultiBlockBase
         if (stack == null || this.getBaseMetaTileEntity() == null) {
             return;
         }
+
         World world = this.getBaseMetaTileEntity()
             .getWorld();
         int posX = this.getBaseMetaTileEntity()
@@ -815,22 +823,22 @@ public class MTEVendingMachine extends MTEMultiBlockBase
             .getYCoord();
         int posZ = this.getBaseMetaTileEntity()
             .getZCoord();
-        int offsetX = this.getExtendedFacing()
-            .getDirection().offsetX;
-        int offsetY = this.getExtendedFacing()
-            .getDirection().offsetY;
-        int offsetZ = this.getExtendedFacing()
-            .getDirection().offsetZ;
+
+        ForgeDirection frontFacing = this.getBaseMetaTileEntity()
+            .getFrontFacing();
+
         final EntityItem itemEntity = new EntityItem(
             world,
-            posX + offsetX * 0.5,
-            posY + offsetY * 0.5,
-            posZ + offsetZ * 0.5,
+            posX + 0.5 + frontFacing.offsetX * 0.7,
+            posY + 0.5 + frontFacing.offsetY * 0.7,
+            posZ + 0.5 + frontFacing.offsetZ * 0.7,
             stack);
+
         itemEntity.delayBeforeCanPickup = 0;
-        itemEntity.motionX = 0.05f * offsetX;
-        itemEntity.motionY = 0.05f * offsetY;
-        itemEntity.motionZ = 0.05f * offsetZ;
+        itemEntity.motionX = 0.1f * frontFacing.offsetX;
+        itemEntity.motionY = 0.1f * frontFacing.offsetY;
+        itemEntity.motionZ = 0.1f * frontFacing.offsetZ;
+
         world.spawnEntityInWorld(itemEntity);
     }
 
