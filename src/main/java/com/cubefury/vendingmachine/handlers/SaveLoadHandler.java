@@ -25,6 +25,7 @@ import net.minecraft.server.MinecraftServer;
 import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.storage.NameCache;
+import com.cubefury.vendingmachine.trade.FavouritesTracker;
 import com.cubefury.vendingmachine.trade.TradeDatabase;
 import com.cubefury.vendingmachine.trade.TradeManager;
 import com.cubefury.vendingmachine.util.FileIO;
@@ -39,6 +40,7 @@ public class SaveLoadHandler {
     private File fileNames = null;
     private File dirTradeState = null;
     private File dirBackupTradeState = null;
+    private File dirFavourites = null;
 
     private SaveLoadHandler() {}
 
@@ -50,6 +52,7 @@ public class SaveLoadHandler {
         }
 
         fileDatabase = new File(VMConfig.developer.trade_db_dir, "tradeDatabase.json");
+        dirFavourites = new File(VMConfig.developer.trade_db_dir, "favourites");
         dirTradeState = new File(VMConfig.world_dir, "tradeState");
         dirBackupTradeState = new File(VMConfig.world_dir, "backup/tradeState");
         fileNames = new File(VMConfig.world_dir, "names.json");
@@ -76,6 +79,10 @@ public class SaveLoadHandler {
 
         if (dirTradeState.mkdirs()) {
             VendingMachine.LOG.info("Created trade state directory");
+        }
+
+        if (dirFavourites.mkdirs()) {
+            VendingMachine.LOG.info("Created favourite trades directory");
         }
 
         File dbParent = fileDatabase.getParentFile();
@@ -184,5 +191,36 @@ public class SaveLoadHandler {
 
         loadDatabase();
         loadTradeState(null);
+    }
+
+    public Future<Void> writeFavourites(UUID player, String worldIdentifier) {
+        if (player == null || worldIdentifier == null) {
+            return null;
+        }
+
+        NBTTagCompound json = FavouritesTracker.INSTANCE.writeToNBT(new NBTTagCompound());
+        File playerDir = new File(dirFavourites, player.toString());
+        playerDir.mkdirs();
+
+        File worldFavourites = new File(playerDir, worldIdentifier + ".json");
+        return FileIO.WriteToFile(worldFavourites, out -> NBTConverter.NBTtoJSON_Compound(json, out, true));
+    }
+
+    public void readFavourites(UUID player, String worldIdentifier) {
+        FavouritesTracker.INSTANCE.clearFavourites();
+
+        if (player == null || worldIdentifier == null) {
+            return;
+        }
+
+        File playerDir = new File(dirFavourites, player.toString());
+        if (!playerDir.exists()) {
+            return;
+        }
+
+        File worldFavourites = new File(playerDir, worldIdentifier + ".json");
+        if (worldFavourites.exists()) {
+            JsonHelper.populateFavouritesFromFile(worldFavourites);
+        }
     }
 }

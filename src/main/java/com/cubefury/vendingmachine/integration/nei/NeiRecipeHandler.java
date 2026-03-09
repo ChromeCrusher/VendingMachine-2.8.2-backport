@@ -2,21 +2,19 @@ package com.cubefury.vendingmachine.integration.nei;
 
 import static codechicken.lib.gui.GuiDraw.changeTexture;
 import static codechicken.lib.gui.GuiDraw.drawTexturedModalRect;
-import static net.minecraft.util.EnumChatFormatting.UNDERLINE;
 import static net.minecraft.util.EnumChatFormatting.getTextWithoutFormattingCodes;
 
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 
 import org.lwjgl.opengl.GL11;
 
@@ -28,6 +26,7 @@ import com.cubefury.vendingmachine.storage.NameCache;
 import com.cubefury.vendingmachine.trade.CurrencyItem;
 import com.cubefury.vendingmachine.trade.Trade;
 import com.cubefury.vendingmachine.util.BigItemStack;
+import com.cubefury.vendingmachine.util.ItemPlaceholder;
 import com.cubefury.vendingmachine.util.Translator;
 
 import betterquesting.api.questing.IQuest;
@@ -47,11 +46,11 @@ import codechicken.nei.PositionedStack;
 import codechicken.nei.api.API;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.GuiRecipe;
-import codechicken.nei.recipe.GuiRecipeCatalyst;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Optional;
 import cpw.mods.fml.common.event.FMLInterModComms;
+import cpw.mods.fml.common.registry.GameRegistry;
 
 public class NeiRecipeHandler extends TemplateRecipeHandler {
 
@@ -105,7 +104,13 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
         if (outputId.equals(getOverlayIdentifier())) {
             setTextColors();
             for (NeiRecipeCache.CacheEntry entry : NeiRecipeCache.recipeCache) {
-                this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
+                try {
+                    this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
+                } catch (Throwable t) {
+                    VendingMachine.LOG.warn(
+                        "Skipping NEI recipe entry for trade because a stack in it is not NEI-safe: " + entry.trade(),
+                        t);
+                }
             }
         } else {
             super.loadCraftingRecipes(outputId, results);
@@ -116,11 +121,17 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
     public void loadCraftingRecipes(ItemStack result) {
         setTextColors();
         for (NeiRecipeCache.CacheEntry entry : NeiRecipeCache.recipeCache) {
-            for (BigItemStack compareTo : entry.trade().toItems) {
-                if (matchStack(result, compareTo)) {
-                    this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
-                    break;
+            try {
+                for (BigItemStack compareTo : entry.trade().toItems) {
+                    if (matchStack(result, compareTo)) {
+                        this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
+                        break;
+                    }
                 }
+            } catch (Throwable t) {
+                VendingMachine.LOG.warn(
+                    "Skipping NEI output recipe entry because a stack in it is not NEI-safe: " + entry.trade(),
+                    t);
             }
         }
     }
@@ -129,31 +140,95 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
     public void loadUsageRecipes(ItemStack ingredient) {
         setTextColors();
         for (NeiRecipeCache.CacheEntry entry : NeiRecipeCache.recipeCache) {
-            for (BigItemStack compareTo : entry.trade().fromItems) {
-                if (matchStack(ingredient, compareTo)) {
-                    this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
-                    break;
+            try {
+                for (BigItemStack compareTo : entry.trade().fromItems) {
+                    if (matchStack(ingredient, compareTo)) {
+                        this.arecipes.add(new CachedTradeRecipe(entry.trade(), entry.requirements()));
+                        break;
+                    }
                 }
+            } catch (Throwable t) {
+                VendingMachine.LOG
+                    .warn("Skipping NEI usage recipe entry because a stack in it is not NEI-safe: " + entry.trade(), t);
             }
         }
     }
 
     public static List<ItemStack> extractStacks(BigItemStack bigStack) {
-        if (bigStack.hasOreDict()) {
-            List<ItemStack> ret = Arrays.asList(
-                bigStack.getOreIngredient()
-                    .getMatchingStacks());
-            ret.forEach(s -> s.stackSize = bigStack.stackSize);
-            return ret;
-        } else {
-            return Collections.singletonList(translateBigStack(bigStack));
+        if (bigStack == null) {
+            return Collections.emptyList();
         }
+
+        if (bigStack.hasOreDict()) {
+            List<ItemStack> ret = new ArrayList<>();
+            for (ItemStack s : bigStack.getOreIngredient()
+                .getMatchingStacks()) {
+                if (s == null) {
+                    continue;
+                }
+
+                ItemStack copy = s.copy();
+                copy.stackSize = bigStack.stackSize;
+                ret.add(sanitizeNeiStack(copy));
+            }
+
+            if (!ret.isEmpty()) {
+                return ret;
+            }
+        }
+
+        return Collections.singletonList(translateBigStack(bigStack));
     }
 
     public static ItemStack translateBigStack(BigItemStack bigStack) {
-        ItemStack stack = bigStack.getBaseStack();
+        ItemStack stack = bigStack.getBaseStack()
+            .copy();
         stack.stackSize = bigStack.stackSize;
-        return stack;
+        return sanitizeNeiStack(stack);
+    }
+
+    private static ItemStack sanitizeNeiStack(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return stack;
+        }
+
+        ItemStack copy = stack.copy();
+
+        try {
+            GameRegistry.getFuelValue(copy);
+            return copy;
+        } catch (Throwable t) {
+            String regName = Item.itemRegistry.getNameForObject(copy.getItem());
+            if (regName == null) {
+                regName = copy.getItem()
+                    .getClass()
+                    .getName();
+            }
+
+            VendingMachine.LOG.warn(
+                "Replacing NEI-unsafe stack in vending machine recipe view: " + regName + "@" + copy.getItemDamage(),
+                t);
+
+            return createNeiPlaceholder(copy, regName);
+        }
+    }
+
+    private static ItemStack createNeiPlaceholder(ItemStack original, String regName) {
+        ItemStack placeholder = new ItemStack(ItemPlaceholder.placeholder, Math.max(1, original.stackSize), 0);
+
+        NBTTagCompound tag = new NBTTagCompound();
+        tag.setString("orig_id", regName);
+        tag.setInteger("orig_meta", original.getItemDamage());
+
+        if (original.hasTagCompound()) {
+            tag.setTag(
+                "orig_tag",
+                original.getTagCompound()
+                    .copy());
+        }
+
+        placeholder.setTagCompound(tag);
+        return placeholder;
     }
 
     private static boolean matchStack(ItemStack compared, BigItemStack bigStackCompareTo) {
@@ -182,63 +257,20 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
         drawTexturedModalRect(0, 0, 0, 0, GUI_WIDTH, 140);
     }
 
-    // Caching the last hovered valid quest here is a bit jank, but it works I guess
     public boolean isMouseOverBqCondition(int recipeIndex, int curY, UUID questId, String text) {
-        if (!(Minecraft.getMinecraft().currentScreen instanceof GuiRecipe)) return false;
-        GuiRecipe<?> gui = (GuiRecipe<?>) Minecraft.getMinecraft().currentScreen;
-
-        List<String> textArray = GuiDraw.fontRenderer.listFormattedStringToWidth(text, GUI_WIDTH);
-        int width = textArray.stream()
-            .map(GuiDraw::getStringWidth)
-            .max(Comparator.naturalOrder())
-            .orElse(0);
-        int height = GuiDraw.fontRenderer.FONT_HEIGHT + (textArray.size() - 1) * LINE_SPACE;
-
-        Point offset = gui.getRecipePosition(recipeIndex);
-
-        Point pos = GuiDraw.getMousePosition();
-
-        // very cursed I'm sorry :doom:
-        GuiRecipeCatalyst catalystWidget = gui.getRecipeCatalystWidget();
-
-        int guiLeft = catalystWidget.x + catalystWidget.w - 6;
-        int guiTop = catalystWidget.y + 9;
-
-        Point relMousePos = new Point(pos.x - guiLeft - offset.x, pos.y - guiTop - offset.y);
-        Rectangle textArea = new Rectangle(2, curY - GuiDraw.fontRenderer.FONT_HEIGHT, width + 2, height + 1);
-        if (textArea.contains(relMousePos)) {
-            lastHoveredRecipeIndex = recipeIndex;
-            lastHoveredTextArea = textArea;
-            lastHoveredQuestId = questId;
-            return true;
-        }
+        this.lastHoveredRecipeIndex = -1;
+        this.lastHoveredTextArea = null;
+        this.lastHoveredQuestId = null;
         return false;
     }
 
     public boolean isMouseOnLastHovered(GuiRecipe<?> gui, int recipeIndex) {
-        if (lastHoveredTextArea == null || lastHoveredQuestId == null || lastHoveredRecipeIndex != recipeIndex) {
-            return false;
-        }
-        GuiRecipeCatalyst catalystWidget = gui.getRecipeCatalystWidget();
-
-        int guiLeft = catalystWidget.x + catalystWidget.w - 6;
-        int guiTop = catalystWidget.y + 9;
-
-        Point offset = gui.getRecipePosition(recipeIndex);
-        Point pos = GuiDraw.getMousePosition();
-        Point relMousePos = new Point(pos.x - guiLeft - offset.x, pos.y - guiTop - offset.y);
-        return lastHoveredTextArea.contains(relMousePos);
+        return false;
     }
 
     @Override
     public boolean mouseClicked(GuiRecipe<?> gui, int button, int recipeIndex) {
-        if (super.mouseClicked(gui, button, recipeIndex)) return true;
-        if (VendingMachine.isBqLoaded && isMouseOnLastHovered(gui, recipeIndex)) {
-            // prepare "Back" behavior
-            processBqGui();
-            return true;
-        }
-        return false;
+        return super.mouseClicked(gui, button, recipeIndex);
     }
 
     @Optional.Method(modid = "betterquesting")
@@ -248,8 +280,6 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
             // back to GuiQuestLines
             parentScreen = ((GuiScreenCanvas) GuiHome.bookmark).parent;
         } else if (GuiHome.bookmark instanceof GuiScreenCanvas && BQ_Settings.useBookmark) {
-            // for example, GuiQuestLines.parent is GuiHome
-            // going back to home screen is not good
             parentScreen = GuiHome.bookmark;
         } else {
             // init quest screen
@@ -309,8 +339,6 @@ public class NeiRecipeHandler extends TemplateRecipeHandler {
                     unformatted.append(
                         translatedQuestKey.length() <= 18 ? translatedQuestKey
                             : translatedQuestKey.substring(0, 18) + "...");
-                    requirementString.append(
-                        isMouseOverBqCondition(recipeIndex, y, questId, unformatted.toString()) ? UNDERLINE : "");
                     requirementString.append(unformatted);
                 }
                 color = BqAdapter.INSTANCE.checkPlayerCompletedQuest(getCurrentPlayerUUID(), questId)

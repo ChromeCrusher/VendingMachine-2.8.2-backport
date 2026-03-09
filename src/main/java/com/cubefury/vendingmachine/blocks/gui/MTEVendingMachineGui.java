@@ -9,7 +9,9 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.cleanroommc.modularui.api.ITheme;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 
 import com.cleanroommc.modularui.api.drawable.IKey;
@@ -41,9 +43,11 @@ import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.VendingMachine;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.gui.GuiTextures;
+import com.cubefury.vendingmachine.network.handlers.NetTradeDisplaySync;
 import com.cubefury.vendingmachine.storage.NameCache;
 import com.cubefury.vendingmachine.trade.CurrencyItem;
 import com.cubefury.vendingmachine.trade.CurrencyType;
+import com.cubefury.vendingmachine.trade.FavouritesTracker;
 import com.cubefury.vendingmachine.trade.TradeCategory;
 import com.cubefury.vendingmachine.trade.TradeDatabase;
 import com.cubefury.vendingmachine.trade.TradeManager;
@@ -69,10 +73,12 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     private final Map<TradeCategory, List<TradeItemDisplayWidget>> displayedTradesList = new HashMap<>();
     private final List<TradeCategory> tradeCategories = new ArrayList<>();
     private final List<InterceptingSlot> inputSlots = new ArrayList<>();
+    private final List<ModularSlot> outputSlots = new ArrayList<>();
 
     private PosGuiData guiData;
     private final PagedWidget.Controller tabController;
     private final SearchBar searchBar;
+    public VendingPageButton favouritesTabWidget;
 
     public static String lastSearch = "";
     public static int lastPage = 0;
@@ -99,7 +105,16 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         }
 
         this.tradeCategories.add(TradeCategory.ALL);
-        this.tradeCategories.addAll(TradeDatabase.INSTANCE.getTradeCategories());
+        this.tradeCategories.add(TradeCategory.FAVOURITES);
+
+        for (TradeCategory category : TradeDatabase.INSTANCE.getTradeCategories()) {
+            if (
+                category != TradeCategory.ALL && category != TradeCategory.FAVOURITES
+                    && !this.tradeCategories.contains(category)
+            ) {
+                this.tradeCategories.add(category);
+            }
+        }
 
         for (TradeCategory c : this.tradeCategories) {
             displayedTradesTiles.put(c, new ArrayList<>(MTEVendingMachine.MAX_TRADES));
@@ -131,37 +146,63 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         this.guiData = guiData;
 
         registerSyncValues(syncManager);
-        ModularPanel panel = new TradeMainPanel("MTEMultiBlockBase", this, guiData, syncManager)
-            .size(228, CUSTOM_UI_HEIGHT)
+
+        TradeMainPanel panel = new TradeMainPanel("MTEMultiBlockBase", this, guiData, syncManager);
+        panel.size(228, CUSTOM_UI_HEIGHT);
+        panel.padding(0);
+        panel.invisible();
+
+        ParentWidget<?> visualPanel = new ParentWidget<>()
+            .background(ITheme.getDefault().getPanelTheme().getBackground())
+            .size(178, CUSTOM_UI_HEIGHT)
+            .left(0)
+            .top(0)
             .padding(4);
 
-        panel.child(createCategoryTabs(this.tabController));
+        visualPanel.child(createCategoryTabs(this.tabController));
 
         Flow mainColumn = new Column().width(170);
         if (VendingMachine.proxy.isClient()) {
-            panel.child(createQolButtonColumn());
+            visualPanel.child(createQolButtonColumn());
             mainColumn.child(
-                createTitleTextStyle(
-                    IKey.lang("gt.blockmachines.multimachine.vendingmachine.name.gui")
-                        .style(IKey.DARK_GRAY)
-                        .get()))
+                    createTitleTextStyle(
+                        IKey.lang("gt.blockmachines.multimachine.vendingmachine.name.gui")
+                            .style(IKey.DARK_GRAY)
+                            .get()))
                 .child(this.searchBar)
-                .child(createTradeUI((TradeMainPanel) panel, this.tabController));
-            mainColumn.child(createCoinInventoryRow((TradeMainPanel) panel, syncManager));
+                .child(createTradeUI(panel, this.tabController));
+            mainColumn.child(createCoinInventoryRow(panel, syncManager));
         }
 
         mainColumn.child(createInventoryRow());
-        panel.child(mainColumn);
+        visualPanel.child(mainColumn);
 
-        panel.child(createIOColumn());
+        visualPanel.child(
+            new Column().size(20)
+                .right(5));
 
+        visualPanel.child(createIOColumn());
+
+        panel.child(visualPanel);
         return panel;
     }
 
     public void restorePreviousSettings() {
         if (this.tabController.isInitialised()) {
+            if (lastPage < 0 || lastPage >= this.tradeCategories.size()) {
+                lastPage = 0;
+            }
+
+            if (
+                this.tradeCategories.get(lastPage) == TradeCategory.FAVOURITES
+                    && !FavouritesTracker.INSTANCE.hasFavourites()
+            ) {
+                lastPage = 0;
+            }
+
             this.tabController.setPage(lastPage);
         }
+
         this.searchBar.setText(lastSearch);
     }
 
@@ -220,22 +261,31 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
         for (int i = 0; i < this.tradeCategories.size(); i++) {
             int index = i;
-            tabColumn.child(
-                new VendingPageButton(i, tabController).tab(GuiTextures.TAB_LEFT, -1)
-                    .overlay(
-                        this.tradeCategories.get(i)
-                            .getTexture()
-                            .asIcon()
-                            .margin(6)
-                            .center())
-                    .tooltipBuilder(builder -> {
-                        builder.clearText();
-                        builder.addLine(
-                            Translator.translate(
-                                this.tradeCategories.get(index)
-                                    .getUnlocalized_name()));
-                    }));
+
+            VendingPageButton button = new VendingPageButton(i, tabController);
+            button.tab(GuiTextures.TAB_LEFT, -1)
+                .overlay(
+                    this.tradeCategories.get(i)
+                        .getTexture()
+                        .asIcon()
+                        .margin(6)
+                        .center())
+                .tooltipBuilder(builder -> {
+                    builder.clearText();
+                    builder.addLine(
+                        Translator.translate(
+                            this.tradeCategories.get(index)
+                                .getUnlocalized_name()));
+                });
+
+            if (this.tradeCategories.get(i) == TradeCategory.FAVOURITES) {
+                this.favouritesTabWidget = button;
+                button.setEnabledIf(widget -> FavouritesTracker.INSTANCE.hasFavourites());
+            }
+
+            tabColumn.child(button);
         }
+
         return tabColumn;
     }
 
@@ -316,48 +366,84 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         if (this.guiData.isClient()) {
             return;
         }
+
         if (!this.base.getActive()) {
-            ejectItems = false;
+            this.ejectItems = false;
             return;
         }
 
+        boolean changed = false;
+
         for (int i = 0; i < MTEVendingMachine.INPUT_SLOTS; i++) {
-            ItemStack stack = base.inputItems.getStackInSlot(i);
-            if (stack != null) {
-                base.inputItems.setStackInSlot(i, null);
-                base.spawnItem(stack.copy());
+            ItemStack stack = this.base.inputItems.getStackInSlot(i);
+            if (stack == null) {
+                continue;
             }
+
+            this.base.inputItems.setStackInSlot(i, null);
+            this.base.spawnItem(stack.copy());
+            changed = true;
         }
-        ejectItems = false;
+
+        for (int i = 0; i < MTEVendingMachine.OUTPUT_SLOTS; i++) {
+            ItemStack stack = this.base.outputItems.getStackInSlot(i);
+            if (stack == null) {
+                continue;
+            }
+
+            this.base.outputItems.setStackInSlot(i, null);
+            this.base.spawnItem(stack.copy());
+            changed = true;
+        }
+
+        while (!this.base.outputBuffer.isEmpty()) {
+            ItemStack stack = this.base.outputBuffer.poll();
+            if (stack == null) {
+                continue;
+            }
+
+            this.base.spawnItem(stack.copy());
+            changed = true;
+        }
+
+        this.ejectItems = false;
+
+        if (!changed) {
+            return;
+        }
+
+        this.base.refreshInputSlotCache();
+        this.refreshInputSlots();
+        this.base.markDirty();
     }
 
     private IWidget createIOColumn() {
         return new ParentWidget<>().background(GuiTextures.SIDE_PANEL_BACKGROUND)
             .width(50)
             .height(214)
-            .right(0)
+            .right(-48)
             .top(40)
             .child(
                 new Column().child(
-                    GuiTextures.INPUT_SPRITE.asWidget()
-                        .leftRel(0.5f)
-                        .top(8)
-                        .width(30)
-                        .height(20))
+                        GuiTextures.INPUT_SPRITE.asWidget()
+                            .leftRel(0.5f)
+                            .top(8)
+                            .width(30)
+                            .height(20))
                     .child(
                         new Row().child(createInputSlots().center())
                             .top(20)
                             .height(18 * 4))
                     .child(
                         new Row().child(
-                            new ToggleButton().overlay(GTGuiTextures.OVERLAY_BUTTON_CYCLIC)
-                                .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.item_eject")))
-                                .syncHandler("ejectItems")
-                                .right(6))
+                                new ToggleButton().overlay(GTGuiTextures.OVERLAY_BUTTON_CYCLIC)
+                                    .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.item_eject")))
+                                    .syncHandler("ejectItems")
+                                    .right(6))
                             .child(
                                 new ToggleButton().overlay(
-                                    GuiTextures.EJECT_COINS.asIcon()
-                                        .size(14))
+                                        GuiTextures.EJECT_COINS.asIcon()
+                                            .size(14))
                                     .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.coin_eject")))
                                     .syncHandler("ejectCoins")
                                     .left(6))
@@ -390,16 +476,16 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
                                 client,
                                 this.getBase()
                                     .getCurrentUser());
-
                             if (client) {
                                 return;
                             }
-
+                            NetTradeDisplaySync.syncTradesToClient(
+                                (EntityPlayerMP) this.getBase()
+                                    .getCurrentUser(),
+                                this.getBase());
                             if (hasCoin) {
                                 this.refreshInputSlots();
                             }
-
-                            base.markDirty();
                         }));
             })
             .build();
@@ -408,11 +494,11 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
     private SlotGroupWidget createOutputSlots() {
         return SlotGroupWidget.builder()
             .matrix("II", "II", "II", "II")
-            .key(
-                'I',
-                index -> new ItemSlot().slot(
+            .key('I', index -> {
+                return new ItemSlot().slot(
                     new ModularSlot(base.outputItems, index).accessibility(false, true)
-                        .slotGroup("outputSlotGroup")))
+                        .slotGroup("outputSlotGroup"));
+            })
             .build();
     }
 
@@ -672,6 +758,8 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
 
     @Override
     protected void registerSyncValues(PanelSyncManager syncManager) {
+        super.registerSyncValues(syncManager);
+
         syncManager.registerSlotGroup("inputSlotGroup", 2, true);
         syncManager.registerSlotGroup("outputSlotGroup", 2, false);
 

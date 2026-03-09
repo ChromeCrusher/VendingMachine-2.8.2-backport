@@ -13,6 +13,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.common.util.Constants;
 
 import com.cubefury.vendingmachine.storage.NameCache;
+import com.cubefury.vendingmachine.trade.FavouritesTracker;
 import com.cubefury.vendingmachine.trade.TradeDatabase;
 import com.cubefury.vendingmachine.trade.TradeManager;
 import com.google.gson.JsonObject;
@@ -80,4 +81,11 @@ public class JsonHelper {
 
         void accept(T arg) throws IOException;
     }
+
+    public static void populateFavouritesFromFile(File file) {
+        JsonObject json = FileIO.ReadFromFile(file);
+        NBTTagCompound nbt = NBTConverter.JSONtoNBT_Object(json, new NBTTagCompound(), true);
+        FavouritesTracker.INSTANCE.readFromNBT(nbt, false);
+    }
+
 }

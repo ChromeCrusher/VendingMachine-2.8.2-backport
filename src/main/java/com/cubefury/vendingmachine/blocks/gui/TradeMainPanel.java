@@ -12,6 +12,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 
 import org.jetbrains.annotations.NotNull;
+import org.lwjgl.input.Keyboard;
 
 import com.cleanroommc.modularui.factory.PosGuiData;
 import com.cleanroommc.modularui.screen.ModularPanel;
@@ -19,6 +20,7 @@ import com.cleanroommc.modularui.screen.ModularScreen;
 import com.cleanroommc.modularui.value.sync.PanelSyncManager;
 import com.cubefury.vendingmachine.VMConfig;
 import com.cubefury.vendingmachine.network.handlers.NetResetVMUser;
+import com.cubefury.vendingmachine.trade.FavouritesTracker;
 import com.cubefury.vendingmachine.trade.TradeCategory;
 import com.cubefury.vendingmachine.trade.TradeDatabase;
 import com.cubefury.vendingmachine.trade.TradeGroup;
@@ -31,6 +33,8 @@ import codechicken.nei.api.ItemFilter;
 public class TradeMainPanel extends ModularPanel {
 
     public boolean shiftHeld = false;
+    public boolean ctrlHeld = false;
+
     private final MTEVendingMachineGui gui;
     private final PanelSyncManager syncManager;
     private final PosGuiData guiData;
@@ -47,24 +51,29 @@ public class TradeMainPanel extends ModularPanel {
 
     @Override
     public boolean onKeyPressed(char typedChar, int keyCode) {
-        // left or right shift
-        if (keyCode == 0x2A || keyCode == 0x36) {
-            shiftHeld = true;
+        if (keyCode == Keyboard.KEY_LSHIFT || keyCode == Keyboard.KEY_RSHIFT) {
+            this.shiftHeld = true;
+        }
+        if (keyCode == Keyboard.KEY_LCONTROL || keyCode == Keyboard.KEY_RCONTROL) {
+            this.ctrlHeld = true;
         }
         return super.onKeyPressed(typedChar, keyCode);
     }
 
     @Override
     public boolean onKeyRelease(char typedChar, int keyCode) {
-        // left or right shift
-        if (keyCode == 0x2A || keyCode == 0x36) {
-            shiftHeld = false;
+        if (keyCode == Keyboard.KEY_LSHIFT || keyCode == Keyboard.KEY_RSHIFT) {
+            this.shiftHeld = false;
+        }
+        if (keyCode == Keyboard.KEY_LCONTROL || keyCode == Keyboard.KEY_RCONTROL) {
+            this.ctrlHeld = false;
+            this.forceGuiRefresh();
         }
         return super.onKeyRelease(typedChar, keyCode);
     }
 
     public void updateGui() {
-        if (shiftHeld) {
+        if (this.shiftHeld || this.ctrlHeld) {
             this.updateTradeInformation(gui.getCurrentTradeDisplayData());
         } else {
             Map<TradeCategory, List<TradeItemDisplay>> trades = formatTrades();
@@ -74,6 +83,11 @@ public class TradeMainPanel extends ModularPanel {
 
     private void updateTradeInformation(Map<TradeCategory, List<TradeItemDisplay>> currentData) {
         Map<UUID, Map<Integer, TradeItemDisplay>> tradeMap = new HashMap<>();
+
+        List<TradeItemDisplay> favouritedTrades = FavouritesTracker.INSTANCE
+            .filterTrades(currentData.get(TradeCategory.ALL));
+        currentData.put(TradeCategory.FAVOURITES, favouritedTrades);
+
         for (TradeItemDisplay tid : TradeManager.INSTANCE.tradeData) {
             tradeMap.putIfAbsent(tid.tgID, new HashMap<>());
             tradeMap.get(tid.tgID)
@@ -89,23 +103,27 @@ public class TradeMainPanel extends ModularPanel {
                 tid.cooldown = cur.cooldown;
                 tid.cooldownText = cur.cooldownText;
                 tid.tradeableNow = cur.tradeableNow;
+                tid.isFavourite = FavouritesTracker.INSTANCE.isFavourite(tid);
             }
         });
     }
 
     @Override
     public void onUpdate() {
-
         super.onUpdate();
+
         if (!this.guiData.isClient()) {
             return;
         }
+
         if (this.player == null && this.syncManager.isInitialised()) {
             this.player = syncManager.getPlayer();
         }
+
         if (TradeManager.INSTANCE.hasCurrencyUpdate) {
             MTEVendingMachineGui.setForceRefresh();
         }
+
         if (
             MTEVendingMachineGui.forceRefresh
                 || (this.ticksOpen % VMConfig.vendingMachineSettings.gui_refresh_interval == 0 && player != null)
@@ -114,6 +132,7 @@ public class TradeMainPanel extends ModularPanel {
             MTEVendingMachineGui.resetForceRefresh();
             TradeManager.INSTANCE.hasCurrencyUpdate = false;
         }
+
         this.ticksOpen += 1;
     }
 
@@ -127,6 +146,7 @@ public class TradeMainPanel extends ModularPanel {
     public Map<TradeCategory, List<TradeItemDisplay>> formatTrades() {
         Map<TradeCategory, List<TradeItemDisplay>> trades = new HashMap<>();
         trades.put(TradeCategory.ALL, new ArrayList<>());
+
         SortMode sortMode = VMConfig.gui.sort_mode;
 
         for (TradeItemDisplay tid : TradeManager.INSTANCE.tradeData) {
@@ -134,6 +154,9 @@ public class TradeMainPanel extends ModularPanel {
             if (group == null) {
                 continue;
             }
+
+            tid.isFavourite = FavouritesTracker.INSTANCE.isFavourite(tid);
+
             TradeCategory category = group.getCategory();
             trades.putIfAbsent(category, new ArrayList<>());
             trades.get(category)
@@ -150,8 +173,8 @@ public class TradeMainPanel extends ModularPanel {
             filteredTrades = filteredTrades.stream()
                 .filter(tid -> tid.satisfiesSearch(filter, searchString.toLowerCase()))
                 .collect(Collectors.toList());
+
             filteredTrades.sort((a, b) -> {
-                // null case
                 if (a == null && b == null) return 0;
                 if (a == null) return 1;
                 if (b == null) return -1;
@@ -160,10 +183,18 @@ public class TradeMainPanel extends ModularPanel {
                 if (b.display.getItem() == null) return -1;
 
                 if (sortMode == SortMode.ALPHABET) {
-                    return (a.display.getDisplayName()
-                        .compareTo(b.display.getDisplayName()));
-                } else if (sortMode == SortMode.SMART) {
-                    // enabled or has cooldown
+                    if (a.isFavourite != b.isFavourite) {
+                        return Boolean.compare(b.isFavourite, a.isFavourite);
+                    }
+                    return a.display.getDisplayName()
+                        .compareTo(b.display.getDisplayName());
+                }
+
+                if (sortMode == SortMode.SMART) {
+                    if (a.isFavourite != b.isFavourite) {
+                        return Boolean.compare(b.isFavourite, a.isFavourite);
+                    }
+
                     int rankA = getRank(a);
                     int rankB = getRank(b);
 
@@ -171,26 +202,29 @@ public class TradeMainPanel extends ModularPanel {
                         return Integer.compare(rankA, rankB);
                     }
 
-                    // cooldown time
                     int cooldownCmp = Long.compare(b.cooldown, a.cooldown);
                     if (cooldownCmp != 0) return cooldownCmp;
 
-                    // display item ordering
                     int idCmp = Integer
                         .compare(Item.getIdFromItem(a.display.getItem()), Item.getIdFromItem(b.display.getItem()));
                     if (idCmp != 0) return idCmp;
+
                     int dmgCmp = Integer.compare(a.display.getItemDamage(), b.display.getItemDamage());
                     if (dmgCmp != 0) return dmgCmp;
 
-                    // sort by tradegroup Order
                     return Integer.compare(a.tradeGroupOrder, b.tradeGroupOrder);
                 }
 
-                // impossible
                 return 0;
             });
+
             trades.replace(category, filteredTrades);
         }
+
+        List<TradeItemDisplay> favouritedTrades = FavouritesTracker.INSTANCE
+            .filterTrades(trades.get(TradeCategory.ALL));
+        trades.put(TradeCategory.FAVOURITES, favouritedTrades);
+
         return trades;
     }
 
@@ -208,11 +242,14 @@ public class TradeMainPanel extends ModularPanel {
         gui.attemptPurchase(display);
     }
 
+    public void forceGuiRefresh() {
+        gui.setForceRefresh();
+    }
+
     @Override
     public void dispose() {
         this.gui.getBase()
             .resetCurrentUser(this.player);
-        // We have to sync reset use manually since dispose() is only run client-side
         NetResetVMUser.sendReset(this.gui.getBase());
         super.dispose();
     }

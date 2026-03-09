@@ -16,6 +16,7 @@ import com.cleanroommc.modularui.value.sync.SyncHandler;
 import com.cleanroommc.modularui.widgets.ItemDisplayWidget;
 import com.cubefury.vendingmachine.blocks.MTEVendingMachine;
 import com.cubefury.vendingmachine.gui.GuiTextures;
+import com.cubefury.vendingmachine.trade.FavouritesTracker;
 import com.cubefury.vendingmachine.util.Translator;
 
 public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interactable {
@@ -70,14 +71,28 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
         if (this.display == null || this.rootPanel == null) {
             return Result.IGNORE;
         }
-        if (!this.checkVmActive() || !this.display.enabled || this.display.hasCooldown) {
+
+        if (this.rootPanel.shiftHeld == this.rootPanel.ctrlHeld) {
             return Result.IGNORE;
         }
+
         if (this.rootPanel.shiftHeld) {
+            if (!this.checkVmActive() || !this.display.enabled || this.display.hasCooldown) {
+                return Result.IGNORE;
+            }
+
             this.rootPanel.attemptPurchase(this.display);
             this.pressed = true;
             return Result.SUCCESS;
         }
+
+        if (this.rootPanel.ctrlHeld) {
+            FavouritesTracker.INSTANCE.toggleFavourites(this.display.tgID, this.display.tradeGroupOrder);
+            FavouritesTracker.INSTANCE.saveFavourites();
+            this.rootPanel.forceGuiRefresh();
+            return Result.SUCCESS;
+        }
+
         return Result.IGNORE;
     }
 
@@ -85,6 +100,7 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
     public void draw(ModularGuiContext context, WidgetTheme widgetTheme) {
         int textColor = Translator.getColor("vendingmachine.gui.display_text_color");
         ItemStack item = this.value == null ? null : this.value.getValue();
+
         if (!Platform.isStackEmpty(item) && this.display != null) {
             if (this.displayType == DisplayType.TILE) {
                 GuiDraw.drawText(" " + this.display.display.stackSize, 4, 9, 1.0f, textColor, false);
@@ -107,6 +123,10 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
 
                 if (this.display.hasCooldown) {
                     GuiDraw.drawText(this.display.cooldownText, 4, 18, 0.8f, 0xFFFFFFFF, false);
+                }
+
+                if (this.display.isFavourite) {
+                    GuiTextures.FAVOURITE_SPRITE.draw(context, 4, 4, 6, 6);
                 }
             } else if (this.displayType == DisplayType.LIST) {
                 GuiDraw.drawText("" + this.display.display.stackSize, 6, 4, 0.9f, textColor, false);
@@ -139,6 +159,10 @@ public class TradeItemDisplayWidget extends ItemDisplayWidget implements Interac
 
                 if (this.display.hasCooldown && this.display.enabled) {
                     GuiDraw.drawText(this.display.cooldownText, 110, 4, 0.9f, 0xFFFFFFFF, false);
+                }
+
+                if (this.display.isFavourite) {
+                    GuiTextures.FAVOURITE_SPRITE.draw(context, 139, 2, 10, 10);
                 }
             }
         }

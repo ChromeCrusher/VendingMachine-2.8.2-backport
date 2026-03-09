@@ -49,6 +49,7 @@ vendingmachine.category.chemistry=Chemistry
 vendingmachine.category.magic=Magic
 vendingmachine.category.bees=Bees
 vendingmachine.category.misc=Miscellaneous
+vendingmachine.category.favourites=Favourites
 
 vendingmachine.coin.adventure=Explorer Coin
 vendingmachine.coin.bees=Beekeeper Coin
@@ -64,3 +65,4 @@ vendingmachine.coin.space=Space Invaders Coin
 vendingmachine.coin.survivor=Survivor Coin
 vendingmachine.coin.technician=Technician Coin
 vendingmachine.coin.witch=Spirit Coin
+
