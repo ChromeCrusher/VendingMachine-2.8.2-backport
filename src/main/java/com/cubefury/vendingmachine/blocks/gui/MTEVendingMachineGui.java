@@ -9,11 +9,11 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.cleanroommc.modularui.api.ITheme;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 
+import com.cleanroommc.modularui.api.ITheme;
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.api.widget.IWidget;
 import com.cleanroommc.modularui.drawable.DynamicDrawable;
@@ -152,8 +152,10 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         panel.padding(0);
         panel.invisible();
 
-        ParentWidget<?> visualPanel = new ParentWidget<>()
-            .background(ITheme.getDefault().getPanelTheme().getBackground())
+        ParentWidget<?> visualPanel = new ParentWidget<>().background(
+            ITheme.getDefault()
+                .getPanelTheme()
+                .getBackground())
             .size(178, CUSTOM_UI_HEIGHT)
             .left(0)
             .top(0)
@@ -165,10 +167,10 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
         if (VendingMachine.proxy.isClient()) {
             visualPanel.child(createQolButtonColumn());
             mainColumn.child(
-                    createTitleTextStyle(
-                        IKey.lang("gt.blockmachines.multimachine.vendingmachine.name.gui")
-                            .style(IKey.DARK_GRAY)
-                            .get()))
+                createTitleTextStyle(
+                    IKey.lang("gt.blockmachines.multimachine.vendingmachine.name.gui")
+                        .style(IKey.DARK_GRAY)
+                        .get()))
                 .child(this.searchBar)
                 .child(createTradeUI(panel, this.tabController));
             mainColumn.child(createCoinInventoryRow(panel, syncManager));
@@ -425,25 +427,25 @@ public class MTEVendingMachineGui extends MTEMultiBlockBaseGui {
             .top(40)
             .child(
                 new Column().child(
-                        GuiTextures.INPUT_SPRITE.asWidget()
-                            .leftRel(0.5f)
-                            .top(8)
-                            .width(30)
-                            .height(20))
+                    GuiTextures.INPUT_SPRITE.asWidget()
+                        .leftRel(0.5f)
+                        .top(8)
+                        .width(30)
+                        .height(20))
                     .child(
                         new Row().child(createInputSlots().center())
                             .top(20)
                             .height(18 * 4))
                     .child(
                         new Row().child(
-                                new ToggleButton().overlay(GTGuiTextures.OVERLAY_BUTTON_CYCLIC)
-                                    .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.item_eject")))
-                                    .syncHandler("ejectItems")
-                                    .right(6))
+                            new ToggleButton().overlay(GTGuiTextures.OVERLAY_BUTTON_CYCLIC)
+                                .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.item_eject")))
+                                .syncHandler("ejectItems")
+                                .right(6))
                             .child(
                                 new ToggleButton().overlay(
-                                        GuiTextures.EJECT_COINS.asIcon()
-                                            .size(14))
+                                    GuiTextures.EJECT_COINS.asIcon()
+                                        .size(14))
                                     .tooltipBuilder(t -> t.addLine(IKey.lang("vendingmachine.gui.coin_eject")))
                                     .syncHandler("ejectCoins")
                                     .left(6))
